@@ -1,7 +1,7 @@
 COMPOSE_DEV := docker compose --env-file .env.development -f infra/compose/docker-compose.base.yml -f infra/compose/docker-compose.dev.yml
 COMPOSE_PROD := docker compose --env-file .env.production -f infra/compose/docker-compose.base.yml -f infra/compose/docker-compose.prod.yml
 
-.PHONY: dev dev-down dev-restart dev-logs dev-ps dev-config prod prod-down prod-logs prod-ps prod-config api-run api-test api-vet clean
+.PHONY: dev dev-down dev-restart dev-logs dev-ps dev-config prod prod-down prod-logs prod-ps prod-config api-run api-test api-vet api-create-admin clean
 
 dev:
 	$(COMPOSE_DEV) up -d
@@ -45,6 +45,9 @@ api-test:
 
 api-vet:
 	cd apps/api && go vet ./...
+
+api-create-admin:
+	cd apps/api && if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/admin
 
 clean:
 	$(COMPOSE_DEV) down -v

@@ -60,3 +60,16 @@ make api-run
 ```
 
 Endpoint awal tersedia di `GET /health/live` dan `GET /health/ready`. API menggunakan response envelope, request ID, logging Zap, recovery middleware, validasi, serta dependency container sebagai fondasi untuk domain pada fase berikutnya.
+
+## Authentication (Phase 3)
+
+Jalankan migration `database/migration/000001_create_users.sql` pada PostgreSQL, isi `AUTH_JWT_SECRET` (minimal 32 karakter) di `apps/api/.env`, lalu buat akun administrator pertama:
+
+```bash
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='gunakan-password-kuat' make api-create-admin
+```
+
+Endpoint autentikasi:
+
+- `POST /auth/login`
+- `GET /auth/me` dengan header `Authorization: Bearer <access_token>`
