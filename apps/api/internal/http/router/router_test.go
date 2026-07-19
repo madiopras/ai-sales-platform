@@ -7,9 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/audit"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/auth"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/catalog"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/customer"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/health"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/http/router"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/order"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/payment"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/promo"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/shipping"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +25,20 @@ func TestLiveHealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine := router.New(zap.NewNop(), health.NewHandler(health.NewService()), auth.NewHandler(auth.NewService(fakeRepository{}, tokens)), tokens)
+	engine := router.New(router.Deps{
+		Logger:   zap.NewNop(),
+		Tokens:   tokens,
+		Health:   health.NewHandler(health.NewService(nil)),
+		Auth:     auth.NewHandler(auth.NewService(fakeRepository{}, tokens)),
+		Catalog:  catalog.NewHandler(catalog.NewService(nil)),
+		Customer: customer.NewHandler(customer.NewService(nil, nil)),
+		Order:    order.NewHandler(order.NewService(nil, nil, nil)),
+		Payment:  payment.NewHandler(payment.NewService(nil, nil, payment.Config{})),
+		Shipping: shipping.NewHandler(shipping.NewService(nil, nil, shipping.Config{})),
+		Promo:    promo.NewHandler(promo.NewService(nil)),
+		Audit:    audit.NewHandler(audit.NewService(nil)),
+	})
+
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)

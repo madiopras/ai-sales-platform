@@ -1,0 +1,321 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 5 TESTING — STEP BY STEP INSTRUCTIONS                      ║
+║                      Product Catalog Testing                                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: All 3 migration files present
+   - 000002_create_categories.sql
+   - 000003_create_products.sql  
+   - 000004_create_product_variants.sql
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATIONS
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply migrations in order
+  psql $POSTGRES_URL < database/migration/000002_create_categories.sql
+  psql $POSTGRES_URL < database/migration/000003_create_products.sql
+  psql $POSTGRES_URL < database/migration/000004_create_product_variants.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt categories, products, product_variants"
+
+Expected output: 3 tables shown (categories, product_variants, products)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: GET AUTH TOKEN
+
+In another terminal, run:
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+Expected response (200 OK):
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {
+      "access_token": "eyJhbGciOiJIUzI1NiIs..."
+    }
+  }
+
+👉 SAVE THIS TOKEN! You'll use it for all admin API tests.
+   Run this to save to variable:
+   TOKEN="<PASTE_THE_ENTIRE_TOKEN_HERE>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: CREATE CATEGORY
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/categories \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Electronics", "slug": "electronics", "is_active": true}'
+
+Expected: 201 Created with category data
+
+Response will look like:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {
+      "id": "uuid-here",
+      "name": "Electronics",
+      "slug": "electronics",
+      "is_active": true,
+      "created_at": "2026-07-19T...",
+      "updated_at": "2026-07-19T..."
+    }
+  }
+
+👉 SAVE THE CATEGORY ID:
+   CATEGORY_ID="<PASTE_THE_ID_FROM_RESPONSE>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: LIST CATEGORIES
+
+Run:
+  curl http://localhost:8081/api/v1/categories \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array containing electronics category
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: CREATE PRODUCT
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/products \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"category_id\": \"$CATEGORY_ID\",
+      \"name\": \"Laptop Pro\",
+      \"slug\": \"laptop-pro\",
+      \"description\": \"High-performance laptop for developers\",
+      \"status\": \"active\"
+    }"
+
+Expected: 201 Created with product data
+
+👉 SAVE THE PRODUCT ID:
+   PRODUCT_ID="<PASTE_THE_PRODUCT_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: GET PRODUCT
+
+Run:
+  curl http://localhost:8081/api/v1/products/$PRODUCT_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with product data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: LIST PRODUCTS WITH FILTER
+
+Run:
+  curl "http://localhost:8081/api/v1/products?status=active&category_id=$CATEGORY_ID" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array of products
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: CREATE VARIANT
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/products/$PRODUCT_ID/variants \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "sku": "LAPTOP-PRO-001",
+      "name": "Silver 16GB RAM",
+      "price": 1299.99,
+      "stock": 50,
+      "is_active": true
+    }'
+
+Expected: 201 Created with variant data
+
+👉 SAVE THE VARIANT ID:
+   VARIANT_ID="<PASTE_THE_VARIANT_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: LIST VARIANTS
+
+Run:
+  curl http://localhost:8081/api/v1/products/$PRODUCT_ID/variants \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array containing your variant
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: UPDATE STOCK
+
+Run:
+  curl -X PUT http://localhost:8081/api/v1/variants/$VARIANT_ID/stock \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"stock_on_hand": 75}'
+
+Expected: 200 OK with updated variant
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: SEARCH PRODUCTS (INTERNAL API)
+
+Run:
+  curl "http://localhost:8081/internal/v1/products/search?q=laptop&limit=10&offset=0"
+
+Expected: 200 OK with active products matching query
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: GET PRODUCT BY ID (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/products/$PRODUCT_ID
+
+Expected: 200 OK with active product (only active products returned)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: GET PRODUCT BY SLUG (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/products/slug/laptop-pro
+
+Expected: 200 OK with active product
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: AUTHORIZATION CHECK (should fail)
+
+Run without token:
+  curl http://localhost:8081/api/v1/categories
+
+Expected: 401 Unauthorized
+
+Response:
+  {
+    "code": "UNAUTHORIZED",
+    "message": "authentication is required",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: DUPLICATE SLUG CHECK (should fail)
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/categories \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Electronics 2", "slug": "electronics"}'
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "SLUG_TAKEN",
+    "message": "slug already taken",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 14: UPDATE CATEGORY
+
+Run:
+  curl -X PUT http://localhost:8081/api/v1/categories/$CATEGORY_ID \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Electronics & Gadgets", "slug": "electronics-gadgets"}'
+
+Expected: 200 OK with updated category
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 15: DELETE VARIANT
+
+Run:
+  curl -X DELETE http://localhost:8081/api/v1/products/$PRODUCT_ID/variants/$VARIANT_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 204 No Content
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 15 tests passed ✅:
+
+✅ Database migrations working
+✅ API endpoints responding
+✅ CRUD operations working
+✅ Authorization working
+✅ Validation working
+✅ Search API working
+✅ Error handling working
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000002_*.sql
+  git add database/migration/000003_*.sql
+  git add database/migration/000004_*.sql
+  git add apps/api/internal/catalog/
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add docs/PHASE_5_*.md
+  git add PHASE_5_*.md
+  
+  git commit -m "Phase 5: Product Catalog - categories, products, variants CRUD + search"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 THEN: READY FOR PHASE 6
+
+Phase 5 is complete! Ready to start Phase 6: Customers & Cart
+
+════════════════════════════════════════════════════════════════════════════════

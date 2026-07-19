@@ -5,10 +5,18 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/audit"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/auth"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/catalog"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/container"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/customer"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/health"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/http/middleware"
 	"github.com/prasdios/ai-sales-platform/apps/api/internal/http/router"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/order"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/payment"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/promo"
+	"github.com/prasdios/ai-sales-platform/apps/api/internal/shipping"
 	"go.uber.org/zap"
 )
 
@@ -21,18 +29,38 @@ type App struct {
 }
 
 func New() (*App, error) {
-	container, err := container.New()
+	ctr, err := container.New()
 	if err != nil {
 		return nil, err
 	}
 
-	handler := health.NewHandler(container.HealthService)
-	authHandler := auth.NewHandler(container.AuthService)
-	server := &http.Server{
-		Addr: container.Config.HTTP.Address(), Handler: router.New(container.Logger, handler, authHandler, container.TokenManager),
-		ReadTimeout: container.Config.HTTP.ReadTimeout, WriteTimeout: container.Config.HTTP.WriteTimeout, IdleTimeout: container.Config.HTTP.IdleTimeout,
+	deps := router.Deps{
+		Logger:           ctr.Logger,
+		Tokens:           ctr.TokenManager,
+		AuditService:     ctr.AuditService,
+		ServiceToken:     ctr.Config.Internal.ServiceToken,
+		WebhookRateLimit: middleware.NewRateLimit(ctr.Config.Internal.WebhookRatePerSec, ctr.Config.Internal.WebhookRateBurst),
+
+		Health:   health.NewHandler(ctr.HealthService),
+		Auth:     auth.NewHandler(ctr.AuthService),
+		Catalog:  catalog.NewHandler(ctr.CatalogService),
+		Customer: customer.NewHandler(ctr.CustomerService),
+		Order:    order.NewHandler(ctr.OrderService),
+		Payment:  payment.NewHandler(ctr.PaymentService),
+		Shipping: shipping.NewHandler(ctr.ShippingService),
+		Promo:    promo.NewHandler(ctr.PromoService),
+		Audit:    audit.NewHandler(ctr.AuditService),
 	}
-	return &App{Logger: container.Logger, server: server, close: container.Close}, nil
+
+	server := &http.Server{
+		Addr:    ctr.Config.HTTP.Address(),
+		Handler: router.New(deps),
+
+		ReadTimeout:  ctr.Config.HTTP.ReadTimeout,
+		WriteTimeout: ctr.Config.HTTP.WriteTimeout,
+		IdleTimeout:  ctr.Config.HTTP.IdleTimeout,
+	}
+	return &App{Logger: ctr.Logger, server: server, close: ctr.Close}, nil
 }
 
 func (a *App) Run() error                         { return a.server.ListenAndServe() }

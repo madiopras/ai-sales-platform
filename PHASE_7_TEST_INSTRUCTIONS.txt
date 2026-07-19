@@ -1,0 +1,311 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 7 TESTING — STEP BY STEP INSTRUCTIONS                      ║
+║          Checkout, Order & Inventory Reservation Testing                    ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: Phase 7 migration present
+   - 000006_create_orders.sql
+     (orders, order_items)
+
+⚠️ PREREQUISITE: Phase 5 & 6 complete. You need:
+   - An active product variant with stock
+   - A customer with an OPEN cart containing at least one item
+   - A customer default address (or supply address in the checkout body)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATION
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply Phase 7 migration
+  psql $POSTGRES_URL < database/migration/000006_create_orders.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt orders, order_items"
+
+Expected output: 2 tables shown (orders, order_items)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: PREPARE TOKENS & IDS
+
+Admin JWT (for /api/v1 order routes):
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+  TOKEN="<PASTE_THE_ACCESS_TOKEN_HERE>"
+
+Internal service token (for /internal/v1 checkout routes):
+
+  SERVICE_TOKEN="<PASTE_INTERNAL_SERVICE_TOKEN_FROM_ENV>"
+
+Customer id with a populated open cart (from Phase 6):
+
+  CUSTOMER_ID="<PASTE_CUSTOMER_ID_WITH_OPEN_CART>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: PREVIEW CHECKOUT (INTERNAL API)
+
+Returns a non-persisted summary. Stock is NOT reserved yet.
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/checkout/preview \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"customer_id\": \"$CUSTOMER_ID\",
+      \"address\": {
+        \"recipient_name\": \"Budi Santoso\",
+        \"phone\": \"6281234567890\",
+        \"address_line\": \"Jl. Merdeka No. 10\",
+        \"city\": \"Jakarta\",
+        \"district\": \"Menteng\",
+        \"postal_code\": \"10310\"
+      },
+      \"courier\": {\"code\": \"jne\", \"service\": \"REG\", \"fee\": 15000}
+    }"
+
+Expected: 200 OK with subtotal, shipping_fee, total, and line items
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: CONFIRM CHECKOUT (INTERNAL API)
+
+Creates the order, reserves stock, and closes the cart.
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/checkout \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"customer_id\": \"$CUSTOMER_ID\",
+      \"address\": {
+        \"recipient_name\": \"Budi Santoso\",
+        \"phone\": \"6281234567890\",
+        \"address_line\": \"Jl. Merdeka No. 10\",
+        \"city\": \"Jakarta\",
+        \"district\": \"Menteng\",
+        \"postal_code\": \"10310\"
+      },
+      \"courier\": {\"code\": \"jne\", \"service\": \"REG\", \"fee\": 15000}
+    }"
+
+Expected: 201 Created with order (status "pending_payment", order_no set)
+
+👉 SAVE THE ORDER ID:
+   ORDER_ID="<PASTE_THE_ORDER_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: VERIFY STOCK RESERVED
+
+Check the variant stock in the DB — reserved should have increased.
+
+Run:
+  psql $POSTGRES_URL -c "SELECT sku, stock_on_hand, stock_reserved FROM product_variants;"
+
+Expected: stock_reserved reflects the quantity ordered
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: GET ORDER (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/orders/$ORDER_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with order + items + address snapshot
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: CART NOW CLOSED (should fail to fetch open cart)
+
+Run:
+  curl http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 404 Not Found (open cart was closed on checkout)
+
+Response:
+  {
+    "code": "CART_NOT_FOUND",
+    "message": "open cart not found",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: EMPTY CART CHECKOUT (should fail)
+
+Try checking out a customer whose cart is empty or absent:
+  curl -X POST http://localhost:8081/internal/v1/checkout \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"customer_id\": \"$CUSTOMER_ID\", \"courier\": {\"code\": \"jne\", \"service\": \"REG\", \"fee\": 15000}}"
+
+Expected: 400 (EMPTY_CART) or 404 (CART_NOT_FOUND)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: LIST ORDERS (ADMIN API)
+
+Run:
+  curl "http://localhost:8081/api/v1/orders?limit=50&offset=0" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array of orders
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: LIST ORDERS FILTERED (ADMIN API)
+
+Run:
+  curl "http://localhost:8081/api/v1/orders?status=pending_payment&customer_id=$CUSTOMER_ID" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with the matching order
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: GET ORDER (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/orders/$ORDER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with order data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: UPDATE ORDER STATUS — INVALID TRANSITION (should fail)
+
+An order in "pending_payment" cannot jump straight to "shipped" (BR-026).
+
+Run:
+  curl -X PUT http://localhost:8081/api/v1/orders/$ORDER_ID/status \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status": "shipped"}'
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "INVALID_TRANSITION",
+    "message": "invalid order status transition",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: UPDATE ORDER STATUS — INVALID VALUE (should fail)
+
+Run:
+  curl -X PUT http://localhost:8081/api/v1/orders/$ORDER_ID/status \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status": "banana"}'
+
+Expected: 400 Bad Request
+
+Response:
+  {
+    "code": "INVALID_STATUS",
+    "message": "invalid order status",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: ORDER NOT FOUND (should fail)
+
+Run:
+  curl http://localhost:8081/api/v1/orders/00000000-0000-0000-0000-000000000000 \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 404 Not Found
+
+Response:
+  {
+    "code": "ORDER_NOT_FOUND",
+    "message": "order not found",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: AUTHORIZATION CHECK (should fail)
+
+Run admin route without token:
+  curl http://localhost:8081/api/v1/orders
+
+Expected: 401 Unauthorized
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 13 tests passed ✅:
+
+✅ Database migration working
+✅ Checkout preview (non-persisted summary)
+✅ Checkout confirm creates order + items
+✅ Stock reservation working (BR-035)
+✅ Cart closed after checkout
+✅ Empty cart guard working
+✅ Admin order list/get + filters
+✅ Status transition validation (BR-026)
+✅ Authorization working
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000006_*.sql
+  git add apps/api/internal/order/
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add PHASE_7_*.md PHASE_7_*.txt
+
+  git commit -m "Phase 7: Checkout, Order & inventory reservation"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 THEN: READY FOR PHASE 8
+
+Phase 7 is complete! Ready to start Phase 8: Payment (Xendit)
+
+════════════════════════════════════════════════════════════════════════════════

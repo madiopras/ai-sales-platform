@@ -1,0 +1,846 @@
+{
+  "info": {
+    "name": "AI Sales Platform - Go Backend API",
+    "description": "Postman collection for the AI Sales Platform Go backend (apps/api).\n\nCovers Health, Auth, Admin API (/api/v1, JWT + role admin|manager), Internal AI API (/internal/v1, X-Service-Token), and Webhooks.\n\nUsage:\n1. Set the collection variables (or use an environment): base_url, admin_email, admin_password, service_token, xendit_callback_token, biteship_webhook_token.\n2. Run 'Auth > Login' first — it saves {{access_token}} automatically.\n3. Many requests auto-save ids (category_id, product_id, variant_id, customer_id, order_id, invoice_id, shipment_id, voucher_id) into collection variables via test scripts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8081", "type": "string" },
+    { "key": "admin_email", "value": "admin@example.com", "type": "string" },
+    { "key": "admin_password", "value": "password123", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "service_token", "value": "", "type": "string" },
+    { "key": "xendit_callback_token", "value": "", "type": "string" },
+    { "key": "biteship_webhook_token", "value": "", "type": "string" },
+    { "key": "category_id", "value": "", "type": "string" },
+    { "key": "product_id", "value": "", "type": "string" },
+    { "key": "variant_id", "value": "", "type": "string" },
+    { "key": "customer_id", "value": "", "type": "string" },
+    { "key": "order_id", "value": "", "type": "string" },
+    { "key": "invoice_id", "value": "", "type": "string" },
+    { "key": "shipment_id", "value": "", "type": "string" },
+    { "key": "voucher_id", "value": "", "type": "string" },
+    { "key": "xendit_invoice_id", "value": "", "type": "string" },
+    { "key": "biteship_order_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health/live", "host": ["{{base_url}}"], "path": ["health", "live"] }
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health/ready", "host": ["{{base_url}}"], "path": ["health", "ready"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.access_token) {",
+                  "  pm.collectionVariables.set('access_token', res.data.access_token);",
+                  "  console.log('Saved access_token');",
+                  "}",
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Catalog (Phase 5)",
+      "item": [
+        {
+          "name": "Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('category_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Electronics\",\n  \"slug\": \"electronics\",\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/categories", "host": ["{{base_url}}"], "path": ["api", "v1", "categories"] }
+          }
+        },
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/categories", "host": ["{{base_url}}"], "path": ["api", "v1", "categories"] }
+          }
+        },
+        {
+          "name": "Get Category",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "categories", "{{category_id}}"] }
+          }
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Electronics & Gadgets\",\n  \"slug\": \"electronics-gadgets\",\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "categories", "{{category_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/categories/{{category_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "categories", "{{category_id}}"] }
+          }
+        },
+        {
+          "name": "Create Product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('product_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"category_id\": \"{{category_id}}\",\n  \"name\": \"Laptop Pro\",\n  \"slug\": \"laptop-pro\",\n  \"description\": \"High-performance laptop for developers\",\n  \"status\": \"active\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/products", "host": ["{{base_url}}"], "path": ["api", "v1", "products"] }
+          }
+        },
+        {
+          "name": "List Products (filter)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products?status=active&category_id={{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "products"],
+              "query": [
+                { "key": "status", "value": "active" },
+                { "key": "category_id", "value": "{{category_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}"] }
+          }
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"category_id\": \"{{category_id}}\",\n  \"name\": \"Laptop Pro 2\",\n  \"slug\": \"laptop-pro-2\",\n  \"description\": \"Updated description\",\n  \"status\": \"active\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}"] }
+          }
+        },
+        {
+          "name": "Create Variant",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('variant_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"sku\": \"LAPTOP-PRO-001\",\n  \"name\": \"Silver 16GB RAM\",\n  \"price\": 1299.99,\n  \"stock\": 50,\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}/variants", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}", "variants"] }
+          }
+        },
+        {
+          "name": "List Variants by Product",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}/variants", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}", "variants"] }
+          }
+        },
+        {
+          "name": "Get Variant",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}/variants/{{variant_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}", "variants", "{{variant_id}}"] }
+          }
+        },
+        {
+          "name": "Update Variant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"sku\": \"LAPTOP-PRO-001\",\n  \"name\": \"Silver 32GB RAM\",\n  \"price\": 1499.99,\n  \"stock\": 40,\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}/variants/{{variant_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}", "variants", "{{variant_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Variant",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/products/{{product_id}}/variants/{{variant_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "products", "{{product_id}}", "variants", "{{variant_id}}"] }
+          }
+        },
+        {
+          "name": "Update Stock",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"stock_on_hand\": 75\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/variants/{{variant_id}}/stock", "host": ["{{base_url}}"], "path": ["api", "v1", "variants", "{{variant_id}}", "stock"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Customers (Phase 6)",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/customers?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "customers"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/customers/{{customer_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "customers", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "List Customer Addresses",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/customers/{{customer_id}}/addresses", "host": ["{{base_url}}"], "path": ["api", "v1", "customers", "{{customer_id}}", "addresses"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Orders (Phase 7)",
+      "item": [
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders?status=pending_payment&customer_id={{customer_id}}&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                { "key": "status", "value": "pending_payment" },
+                { "key": "customer_id", "value": "{{customer_id}}" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "orders", "{{order_id}}"] }
+          }
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"processing\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}/status", "host": ["{{base_url}}"], "path": ["api", "v1", "orders", "{{order_id}}", "status"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Payments (Phase 8)",
+      "item": [
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/invoices/{{invoice_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "invoices", "{{invoice_id}}"] }
+          }
+        },
+        {
+          "name": "Get Invoice by Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}/invoice", "host": ["{{base_url}}"], "path": ["api", "v1", "orders", "{{order_id}}", "invoice"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Shipping (Phase 9)",
+      "item": [
+        {
+          "name": "Create Shipment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('shipment_id', res.data.id); }",
+                  "if (res && res.data && res.data.biteship_order_id) { pm.collectionVariables.set('biteship_order_id', res.data.biteship_order_id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/shipments", "host": ["{{base_url}}"], "path": ["api", "v1", "shipments"] }
+          }
+        },
+        {
+          "name": "Get Shipment",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/shipments/{{shipment_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "shipments", "{{shipment_id}}"] }
+          }
+        },
+        {
+          "name": "Get Shipment by Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/orders/{{order_id}}/shipment", "host": ["{{base_url}}"], "path": ["api", "v1", "orders", "{{order_id}}", "shipment"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Vouchers (Phase 10)",
+      "item": [
+        {
+          "name": "Create Voucher",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('voucher_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"HEMAT10\",\n  \"description\": \"Diskon 10 persen\",\n  \"discount_type\": \"percent\",\n  \"discount_value\": 10,\n  \"min_order_amount\": 100000,\n  \"quota\": 100,\n  \"expires_at\": \"2027-12-31T23:59:59Z\",\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/vouchers", "host": ["{{base_url}}"], "path": ["api", "v1", "vouchers"] }
+          }
+        },
+        {
+          "name": "List Vouchers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vouchers?active_only=true&limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vouchers"],
+              "query": [
+                { "key": "active_only", "value": "true" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Voucher",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/vouchers/{{voucher_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "vouchers", "{{voucher_id}}"] }
+          }
+        },
+        {
+          "name": "Update Voucher",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Diskon 15 persen\",\n  \"discount_type\": \"percent\",\n  \"discount_value\": 15,\n  \"min_order_amount\": 150000,\n  \"quota\": 200,\n  \"expires_at\": \"2027-12-31T23:59:59Z\",\n  \"is_active\": true\n}" },
+            "url": { "raw": "{{base_url}}/api/v1/vouchers/{{voucher_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "vouchers", "{{voucher_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Voucher",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/vouchers/{{voucher_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "vouchers", "{{voucher_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin - Audit Logs (Phase 10)",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "audit-logs"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Audit Log",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/audit-logs/{{audit_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "audit-logs", "{{audit_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Catalog Search",
+      "item": [
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/internal/v1/products/search?q=laptop&limit=10&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["internal", "v1", "products", "search"],
+              "query": [
+                { "key": "q", "value": "laptop" },
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/products/{{product_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "products", "{{product_id}}"] }
+          }
+        },
+        {
+          "name": "Get Product by Slug",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/products/slug/laptop-pro", "host": ["{{base_url}}"], "path": ["internal", "v1", "products", "slug", "laptop-pro"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Customers & Cart (Phase 6)",
+      "item": [
+        {
+          "name": "Upsert Customer by Phone",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('customer_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"phone\": \"6281234567890\",\n  \"name\": \"Budi Santoso\"\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/customers", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers"] }
+          }
+        },
+        {
+          "name": "Get Customer",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "Create Address",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"label\": \"rumah\",\n  \"recipient_name\": \"Budi Santoso\",\n  \"phone\": \"6281234567890\",\n  \"address_line\": \"Jl. Merdeka No. 10\",\n  \"city\": \"Jakarta\",\n  \"district\": \"Menteng\",\n  \"postal_code\": \"10310\",\n  \"notes\": \"Pagar hijau\",\n  \"is_default\": true\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/addresses", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "addresses"] }
+          }
+        },
+        {
+          "name": "Get Default Address",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/addresses/default", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "addresses", "default"] }
+          }
+        },
+        {
+          "name": "Get Open Cart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/cart", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "cart"] }
+          }
+        },
+        {
+          "name": "Add Cart Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"variant_id\": \"{{variant_id}}\",\n  \"qty\": 2\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/cart/items", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "cart", "items"] }
+          }
+        },
+        {
+          "name": "Update Cart Item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"qty\": 5\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/cart/items/{{variant_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "cart", "items", "{{variant_id}}"] }
+          }
+        },
+        {
+          "name": "Remove Cart Item",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/customers/{{customer_id}}/cart/items/{{variant_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "customers", "{{customer_id}}", "cart", "items", "{{variant_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Checkout & Orders (Phase 7)",
+      "item": [
+        {
+          "name": "Preview Checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"address\": {\n    \"recipient_name\": \"Budi Santoso\",\n    \"phone\": \"6281234567890\",\n    \"address_line\": \"Jl. Merdeka No. 10\",\n    \"city\": \"Jakarta\",\n    \"district\": \"Menteng\",\n    \"postal_code\": \"10310\"\n  },\n  \"courier\": { \"code\": \"jne\", \"service\": \"REG\", \"fee\": 15000 }\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/checkout/preview", "host": ["{{base_url}}"], "path": ["internal", "v1", "checkout", "preview"] }
+          }
+        },
+        {
+          "name": "Confirm Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('order_id', res.data.id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"address\": {\n    \"recipient_name\": \"Budi Santoso\",\n    \"phone\": \"6281234567890\",\n    \"address_line\": \"Jl. Merdeka No. 10\",\n    \"city\": \"Jakarta\",\n    \"district\": \"Menteng\",\n    \"postal_code\": \"10310\"\n  },\n  \"courier\": { \"code\": \"jne\", \"service\": \"REG\", \"fee\": 15000 },\n  \"voucher_code\": \"\"\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/checkout", "host": ["{{base_url}}"], "path": ["internal", "v1", "checkout"] }
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "orders", "{{order_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Payments (Phase 8)",
+      "item": [
+        {
+          "name": "Create Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res && res.data && res.data.id) { pm.collectionVariables.set('invoice_id', res.data.id); }",
+                  "if (res && res.data && res.data.xendit_invoice_id) { pm.collectionVariables.set('xendit_invoice_id', res.data.xendit_invoice_id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"order_id\": \"{{order_id}}\",\n  \"payer_email\": \"budi@example.com\"\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/payments/invoices", "host": ["{{base_url}}"], "path": ["internal", "v1", "payments", "invoices"] }
+          }
+        },
+        {
+          "name": "Get Invoice",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/payments/invoices/{{invoice_id}}", "host": ["{{base_url}}"], "path": ["internal", "v1", "payments", "invoices", "{{invoice_id}}"] }
+          }
+        },
+        {
+          "name": "Get Invoice by Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/orders/{{order_id}}/invoice", "host": ["{{base_url}}"], "path": ["internal", "v1", "orders", "{{order_id}}", "invoice"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Shipping (Phase 9)",
+      "item": [
+        {
+          "name": "Get Rates",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"origin_postal_code\": 10310,\n  \"destination_postal_code\": 40111,\n  \"couriers\": \"jne,jnt,sicepat\",\n  \"items\": [\n    { \"name\": \"Laptop Pro\", \"value\": 1299990, \"quantity\": 1, \"weight\": 1500 }\n  ]\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/shipping/rates", "host": ["{{base_url}}"], "path": ["internal", "v1", "shipping", "rates"] }
+          }
+        },
+        {
+          "name": "Get Shipment by Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "X-Service-Token", "value": "{{service_token}}" }],
+            "url": { "raw": "{{base_url}}/internal/v1/orders/{{order_id}}/shipment", "host": ["{{base_url}}"], "path": ["internal", "v1", "orders", "{{order_id}}", "shipment"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal AI - Vouchers (Phase 10)",
+      "item": [
+        {
+          "name": "Validate Voucher",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Service-Token", "value": "{{service_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"HEMAT10\",\n  \"subtotal\": 200000\n}" },
+            "url": { "raw": "{{base_url}}/internal/v1/vouchers/validate", "host": ["{{base_url}}"], "path": ["internal", "v1", "vouchers", "validate"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Xendit Webhook (PAID)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-callback-token", "value": "{{xendit_callback_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"id\": \"{{xendit_invoice_id}}\",\n  \"external_id\": \"{{order_id}}\",\n  \"status\": \"PAID\",\n  \"paid_amount\": 100000,\n  \"paid_at\": \"2026-07-19T10:00:00Z\"\n}" },
+            "url": { "raw": "{{base_url}}/webhooks/xendit", "host": ["{{base_url}}"], "path": ["webhooks", "xendit"] }
+          }
+        },
+        {
+          "name": "Biteship Webhook (status update)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "{{biteship_webhook_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"event\": \"order.status\",\n  \"order_id\": \"{{biteship_order_id}}\",\n  \"status\": \"delivered\",\n  \"courier_waybill_id\": \"JNE123456789\"\n}" },
+            "url": { "raw": "{{base_url}}/webhooks/biteship", "host": ["{{base_url}}"], "path": ["webhooks", "biteship"] }
+          }
+        }
+      ]
+    }
+  ]
+}

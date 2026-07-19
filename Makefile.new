@@ -1,0 +1,79 @@
+"COMPOSE_DEV := docker compose --env-file .env.development -f infra/compose/docker-compose.base.yml -f infra/compose/docker-compose.dev.yml
+COMPOSE_PROD := docker compose --env-file .env.production -f infra/compose/docker-compose.base.yml -f infra/compose/docker-compose.prod.yml
+
+.PHONY: dev dev-down dev-restart dev-logs dev-ps dev-config prod prod-down prod-logs prod-ps prod-config api-run api-test api-vet api-create-admin migrate-up migrate-down migrate-create clean
+
+dev:
+	$(COMPOSE_DEV) up -d
+
+dev-down:
+	$(COMPOSE_DEV) down
+
+dev-restart:
+	$(COMPOSE_DEV) down
+	$(COMPOSE_DEV) up -d
+
+dev-logs:
+	$(COMPOSE_DEV) logs -f
+
+dev-ps:
+	$(COMPOSE_DEV) ps
+
+dev-config:
+	$(COMPOSE_DEV) config --quiet
+
+prod:
+	$(COMPOSE_PROD) up -d
+
+prod-down:
+	$(COMPOSE_PROD) down
+
+prod-logs:
+	$(COMPOSE_PROD) logs -f
+
+prod-ps:
+	$(COMPOSE_PROD) ps
+
+prod-config:
+	$(COMPOSE_PROD) config --quiet
+
+api-run:
+	cd apps/api && if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/api
+
+api-test:
+	cd apps/api && go test ./...
+
+api-vet:
+	cd apps/api && go vet ./...
+
+api-create-admin:
+	cd apps/api && if [ -f .env ]; then set -a; . ./.env; set +a; fi; go run ./cmd/admin
+
+# Migration helpers (up-only strategy)
+MIGRATION_DIR := database/migration
+
+migrate-create:
+	@read -p \"Enter migration name (e.g. create_categories): \" name; \\
+	timestamp=$$(date +%s); \\
+	filepath=\"$(MIGRATION_DIR)/$${timestamp}_$${name}.sql\"; \\
+	echo \"-- Migration: $${name}\" > \"$$filepath\"; \\
+	echo \"-- Created: $$(date)\" >> \"$$filepath\"; \\
+	echo \"\"; \\
+	echo \"Created: $$filepath\"; \\
+	echo \"Edit the file and add your SQL statements.\"
+
+migrate-up:
+	@echo \"Migration files in $(MIGRATION_DIR):\"
+	@ls -1 $(MIGRATION_DIR)/*.sql 2>/dev/null || echo \"No migrations found\"
+	@echo \"\"
+	@echo \"To apply migrations, use psql:\"
+	@echo \"  psql \\$$POSTGRES_URL < $(MIGRATION_DIR)/000001_create_users.sql\"
+	@echo \"  psql \\$$POSTGRES_URL < $(MIGRATION_DIR)/000007_create_vouchers_audit.sql\"
+
+migrate-down:
+	@echo \"Migrate down not implemented (up-only strategy per roadmap).\"
+	@echo \"Create a new migration to undo changes if needed.\"
+
+clean:
+	$(COMPOSE_DEV) down -v
+"

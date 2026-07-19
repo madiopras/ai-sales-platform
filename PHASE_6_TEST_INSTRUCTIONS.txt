@@ -1,0 +1,306 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 6 TESTING — STEP BY STEP INSTRUCTIONS                      ║
+║                    Customers & Cart Testing                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: Phase 6 migration present
+   - 000005_create_customers_carts.sql
+     (customers, customer_addresses, carts, cart_items)
+
+⚠️ PREREQUISITE: Phase 5 must be complete (products + variants exist).
+   You need at least one active product variant to add to a cart.
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATION
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply Phase 6 migration
+  psql $POSTGRES_URL < database/migration/000005_create_customers_carts.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt customers, customer_addresses, carts, cart_items"
+
+Expected output: 4 tables shown (customers, customer_addresses, carts, cart_items)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: PREPARE TOKENS
+
+Admin JWT (for /api/v1 read-only customer routes):
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+  TOKEN="<PASTE_THE_ACCESS_TOKEN_HERE>"
+
+Internal service token (for /internal/v1 customer & cart routes).
+This is the INTERNAL_SERVICE_TOKEN from apps/api/.env — apps/ai uses it.
+It is sent in the "X-Service-Token" header.
+
+  SERVICE_TOKEN="<PASTE_INTERNAL_SERVICE_TOKEN_FROM_ENV>"
+
+You also need a variant id from Phase 5:
+
+  VARIANT_ID="<PASTE_AN_ACTIVE_VARIANT_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: UPSERT CUSTOMER BY PHONE (INTERNAL API)
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/customers \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"phone": "6281234567890", "name": "Budi Santoso"}'
+
+Expected: 200 OK with customer data
+
+👉 SAVE THE CUSTOMER ID:
+   CUSTOMER_ID="<PASTE_THE_CUSTOMER_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: UPSERT SAME PHONE (IDEMPOTENT)
+
+Run the same phone again with a new name:
+  curl -X POST http://localhost:8081/internal/v1/customers \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"phone": "6281234567890", "name": "Budi S."}'
+
+Expected: 200 OK, SAME customer id returned (no duplicate created)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: GET CUSTOMER (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/customers/$CUSTOMER_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with customer data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: CREATE ADDRESS (INTERNAL API)
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/addresses \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "label": "rumah",
+      "recipient_name": "Budi Santoso",
+      "phone": "6281234567890",
+      "address_line": "Jl. Merdeka No. 10",
+      "city": "Jakarta",
+      "district": "Menteng",
+      "postal_code": "10310",
+      "notes": "Pagar hijau",
+      "is_default": true
+    }'
+
+Expected: 201 Created with address data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: GET DEFAULT ADDRESS (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/addresses/default \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with the default address (BR-009)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: ADD CART ITEM (INTERNAL API)
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart/items \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"variant_id\": \"$VARIANT_ID\", \"qty\": 2}"
+
+Expected: 200 OK with cart containing 1 line item (qty 2)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: GET OPEN CART (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with open cart + items + unit price snapshot
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: UPDATE CART ITEM QTY (INTERNAL API)
+
+Run:
+  curl -X PUT http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart/items/$VARIANT_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"qty": 5}'
+
+Expected: 200 OK with updated item (qty 5)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: INSUFFICIENT STOCK CHECK (should fail)
+
+Run with a huge qty beyond available stock:
+  curl -X PUT http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart/items/$VARIANT_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"qty": 999999}'
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "INSUFFICIENT_STOCK",
+    "message": "insufficient stock",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: REMOVE CART ITEM (INTERNAL API)
+
+Run:
+  curl -X DELETE http://localhost:8081/internal/v1/customers/$CUSTOMER_ID/cart/items/$VARIANT_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with cart now empty
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: LIST CUSTOMERS (ADMIN API)
+
+Run:
+  curl "http://localhost:8081/api/v1/customers?limit=50&offset=0" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array containing Budi
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: GET CUSTOMER (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/customers/$CUSTOMER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with customer data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: LIST ADDRESSES (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/customers/$CUSTOMER_ID/addresses \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array containing the address
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 14: SERVICE TOKEN CHECK (should fail)
+
+Run internal endpoint WITHOUT service token:
+  curl http://localhost:8081/internal/v1/customers/$CUSTOMER_ID
+
+Expected: 401 Unauthorized
+
+Response:
+  {
+    "code": "UNAUTHORIZED",
+    "message": "invalid service token",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 15: CUSTOMER NOT FOUND (should fail)
+
+Run:
+  curl http://localhost:8081/internal/v1/customers/00000000-0000-0000-0000-000000000000 \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 404 Not Found
+
+Response:
+  {
+    "code": "CUSTOMER_NOT_FOUND",
+    "message": "customer not found",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 15 tests passed ✅:
+
+✅ Database migration working
+✅ Customer upsert-by-phone idempotent
+✅ Address CRUD + default address (BR-009)
+✅ Cart items add/update/remove
+✅ Stock validation on cart operations
+✅ Admin read-only APIs working
+✅ Service token auth working
+✅ Error handling working
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000005_*.sql
+  git add apps/api/internal/customer/
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add PHASE_6_*.md PHASE_6_*.txt
+
+  git commit -m "Phase 6: Customers & Cart - customers, addresses, carts, cart items"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 THEN: READY FOR PHASE 7
+
+Phase 6 is complete! Ready to start Phase 7: Checkout, Order & Inventory Reservation
+
+════════════════════════════════════════════════════════════════════════════════

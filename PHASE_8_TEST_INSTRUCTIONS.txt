@@ -1,0 +1,319 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 8 TESTING — STEP BY STEP INSTRUCTIONS                      ║
+║                    Payment (Xendit) Testing                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: Phase 8 migration present
+   - 000008_create_invoices.sql
+     (invoices, payment_events)
+
+⚠️ PREREQUISITE: Phase 7 complete. You need an order in "pending_payment".
+⚠️ CONFIG: Set these in apps/api/.env before starting:
+   - XENDIT_SECRET_KEY       (Basic auth against Xendit API)
+   - XENDIT_CALLBACK_TOKEN   (compared to x-callback-token webhook header)
+   - XENDIT_BASE_URL         (default https://api.xendit.co)
+   - XENDIT_INVOICE_DURATION (default 24h)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATION
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply Phase 8 migration
+  psql $POSTGRES_URL < database/migration/000008_create_invoices.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt invoices, payment_events"
+
+Expected output: 2 tables shown (invoices, payment_events)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: PREPARE TOKENS & IDS
+
+Admin JWT (for /api/v1 invoice read routes):
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+  TOKEN="<PASTE_THE_ACCESS_TOKEN_HERE>"
+
+Internal service token (for /internal/v1 payment routes):
+
+  SERVICE_TOKEN="<PASTE_INTERNAL_SERVICE_TOKEN_FROM_ENV>"
+
+Order id in pending_payment (from Phase 7):
+
+  ORDER_ID="<PASTE_ORDER_ID>"
+
+Xendit callback token (must match XENDIT_CALLBACK_TOKEN in .env):
+
+  CALLBACK_TOKEN="<PASTE_XENDIT_CALLBACK_TOKEN>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: CREATE INVOICE (INTERNAL API)
+
+Creates a hosted Xendit payment page for the order.
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/payments/invoices \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"order_id\": \"$ORDER_ID\", \"payer_email\": \"budi@example.com\"}"
+
+Expected: 201 Created with invoice data (status "waiting_payment",
+          xendit_payment_url populated, invoice_no set)
+
+👉 SAVE THE INVOICE ID:
+   INVOICE_ID="<PASTE_THE_INVOICE_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: DUPLICATE INVOICE (should fail)
+
+Run the same create again:
+  curl -X POST http://localhost:8081/internal/v1/payments/invoices \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"order_id\": \"$ORDER_ID\"}"
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "INVOICE_ALREADY_EXISTS",
+    "message": "invoice already exists for order",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: GET INVOICE (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/payments/invoices/$INVOICE_ID \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with invoice data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: GET INVOICE BY ORDER (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/orders/$ORDER_ID/invoice \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with the same invoice
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: GET INVOICE (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/invoices/$INVOICE_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with invoice data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: GET INVOICE BY ORDER (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/orders/$ORDER_ID/invoice \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with invoice data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: WEBHOOK — INVALID CALLBACK TOKEN (should fail)
+
+Simulate Xendit webhook with a wrong token. Use the xendit_invoice_id
+(the "id" field). Set XENDIT_INVOICE_ID from the invoice you created.
+
+  XENDIT_INVOICE_ID="<PASTE_xendit_invoice_id_FROM_INVOICE>"
+
+Run:
+  curl -X POST http://localhost:8081/webhooks/xendit \
+    -H "x-callback-token: WRONG_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\": \"$XENDIT_INVOICE_ID\", \"external_id\": \"$ORDER_ID\", \"status\": \"PAID\", \"paid_amount\": 100000}"
+
+Expected: 401 Unauthorized
+
+Response:
+  {
+    "code": "INVALID_CALLBACK_TOKEN",
+    "message": "invalid callback token",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: WEBHOOK — PAID EVENT (success)
+
+Run with the correct callback token:
+  curl -X POST http://localhost:8081/webhooks/xendit \
+    -H "x-callback-token: $CALLBACK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\": \"$XENDIT_INVOICE_ID\", \"external_id\": \"$ORDER_ID\", \"status\": \"PAID\", \"paid_amount\": 100000, \"paid_at\": \"2026-07-19T10:00:00Z\"}"
+
+Expected: 200 OK
+
+Response:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {"status": "ok", "invoice_status": "paid"}
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: VERIFY ORDER PAID + STOCK COMMITTED
+
+Run:
+  curl http://localhost:8081/api/v1/orders/$ORDER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: order status now "paid"
+
+Check stock committed (reserved decremented, on_hand reduced) (BR-035):
+  psql $POSTGRES_URL -c "SELECT sku, stock_on_hand, stock_reserved FROM product_variants;"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: WEBHOOK IDEMPOTENCY (retry collapses)
+
+Send the exact same PAID webhook again:
+  curl -X POST http://localhost:8081/webhooks/xendit \
+    -H "x-callback-token: $CALLBACK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"id\": \"$XENDIT_INVOICE_ID\", \"external_id\": \"$ORDER_ID\", \"status\": \"PAID\", \"paid_amount\": 100000, \"paid_at\": \"2026-07-19T10:00:00Z\"}"
+
+Expected: 200 OK, no double processing (BR-042). Verify only one processed
+          row exists:
+  psql $POSTGRES_URL -c "SELECT xendit_invoice_id, event_status, processed FROM payment_events;"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: WEBHOOK — UNKNOWN INVOICE (ignored, not error)
+
+Run with an id that doesn't exist:
+  curl -X POST http://localhost:8081/webhooks/xendit \
+    -H "x-callback-token: $CALLBACK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"id": "unknown-xendit-id", "external_id": "unknown", "status": "PAID"}'
+
+Expected: 200 OK (ignored to avoid retry storms)
+
+Response:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {"status": "ignored", "reason": "invoice_not_found"}
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: WEBHOOK — EMPTY PAYLOAD (should fail)
+
+Run:
+  curl -X POST http://localhost:8081/webhooks/xendit \
+    -H "x-callback-token: $CALLBACK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d ''
+
+Expected: 400 Bad Request
+
+Response:
+  {
+    "code": "INVALID_PAYLOAD",
+    "message": "empty payload",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: EXPIRY WORKER (release reserved stock)
+
+Invoices past expired_at should be marked expired and reserved stock released.
+Run the worker (or wait for its schedule):
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+  go run ./apps/api/cmd/worker
+
+Expected: expired invoices flipped to "expired", their orders cancelled,
+          and reserved stock released.
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 13 tests passed ✅:
+
+✅ Database migration working
+✅ Invoice creation via Xendit
+✅ Duplicate invoice guard
+✅ Invoice read (internal + admin)
+✅ Webhook signature verification (BR-042)
+✅ Paid event flips order + commits stock (BR-035)
+✅ Webhook idempotency working
+✅ Unknown invoice ignored gracefully
+✅ Expiry worker releases stock
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000008_*.sql
+  git add apps/api/internal/payment/
+  git add apps/api/cmd/worker/
+  git add apps/api/internal/config/config.go
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add apps/api/.env.example
+  git add PHASE_8_*.md PHASE_8_*.txt
+
+  git commit -m "Phase 8: Payment (Xendit) - invoices, webhook, expiry worker"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 THEN: READY FOR PHASE 9
+
+Phase 8 is complete! Ready to start Phase 9: Shipping (Biteship)
+
+════════════════════════════════════════════════════════════════════════════════

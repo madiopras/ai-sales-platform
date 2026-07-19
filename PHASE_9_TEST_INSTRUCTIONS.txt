@@ -1,0 +1,335 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 9 TESTING — STEP BY STEP INSTRUCTIONS                      ║
+║                   Shipping (Biteship) Testing                               ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: Phase 9 migration present
+   - 000009_create_shipments.sql
+     (shipments, shipment_events)
+
+⚠️ PREREQUISITE: Phase 7 & 8 complete. You need a paid order ready to ship.
+⚠️ CONFIG: Set these in apps/api/.env before starting:
+   - BITESHIP_API_KEY            (raw Authorization header on outbound calls)
+   - BITESHIP_WEBHOOK_TOKEN      (compared to auth token header on webhooks)
+   - BITESHIP_BASE_URL           (default https://api.biteship.com)
+   - BITESHIP_ORIGIN_POSTAL_CODE and BITESHIP_ORIGIN_* shipper details
+   - BITESHIP_AUTOCOMPLETE_AFTER (default 72h)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATION
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply Phase 9 migration
+  psql $POSTGRES_URL < database/migration/000009_create_shipments.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt shipments, shipment_events"
+
+Expected output: 2 tables shown (shipments, shipment_events)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: PREPARE TOKENS & IDS
+
+Admin JWT (for /api/v1 shipment routes):
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+  TOKEN="<PASTE_THE_ACCESS_TOKEN_HERE>"
+
+Internal service token (for /internal/v1 shipping routes):
+
+  SERVICE_TOKEN="<PASTE_INTERNAL_SERVICE_TOKEN_FROM_ENV>"
+
+Paid order id ready to ship (from Phase 8):
+
+  ORDER_ID="<PASTE_ORDER_ID>"
+
+Biteship webhook token (must match BITESHIP_WEBHOOK_TOKEN in .env):
+
+  WEBHOOK_TOKEN="<PASTE_BITESHIP_WEBHOOK_TOKEN>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: GET SHIPPING RATES (INTERNAL API)
+
+Returns courier options for a destination (BR-010..BR-011). Called by the AI
+before checkout so the customer can pick a service.
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/shipping/rates \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "origin_postal_code": 10310,
+      "destination_postal_code": 40111,
+      "couriers": "jne,jnt,sicepat",
+      "items": [
+        {"name": "Laptop Pro", "value": 1299990, "quantity": 1, "weight": 1500}
+      ]
+    }'
+
+Expected: 200 OK with a "rates" array of courier options
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: RATES — MISSING DESTINATION (should fail)
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/shipping/rates \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"origin_postal_code": 10310}'
+
+Expected: 400 Bad Request
+
+Response:
+  {
+    "code": "VALIDATION_ERROR",
+    "message": "destination_postal_code is required",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: CREATE SHIPMENT (ADMIN API)
+
+Books a shipment at Biteship for an order that is ready to ship (BR-028).
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/shipments \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"order_id\": \"$ORDER_ID\"}"
+
+Expected: 201 Created with shipment data (biteship_order_id, tracking_no,
+          courier fields populated)
+
+👉 SAVE THE SHIPMENT ID:
+   SHIPMENT_ID="<PASTE_THE_SHIPMENT_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: DUPLICATE SHIPMENT (should fail)
+
+Run the same create again:
+  curl -X POST http://localhost:8081/api/v1/shipments \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"order_id\": \"$ORDER_ID\"}"
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "SHIPMENT_ALREADY_EXISTS",
+    "message": "shipment already exists for order",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: GET SHIPMENT (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/shipments/$SHIPMENT_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with shipment data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: GET SHIPMENT BY ORDER (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/orders/$ORDER_ID/shipment \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with the same shipment
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: GET SHIPMENT BY ORDER (INTERNAL API)
+
+Run:
+  curl http://localhost:8081/internal/v1/orders/$ORDER_ID/shipment \
+    -H "X-Service-Token: $SERVICE_TOKEN"
+
+Expected: 200 OK with shipment data (BR-032)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: WEBHOOK — INVALID SIGNATURE (should fail)
+
+Simulate a Biteship tracking callback with a wrong token. Set the
+BITESHIP_ORDER_ID from the shipment you created.
+
+  BITESHIP_ORDER_ID="<PASTE_biteship_order_id_FROM_SHIPMENT>"
+
+Run:
+  curl -X POST http://localhost:8081/webhooks/biteship \
+    -H "Authorization: WRONG_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"event\": \"order.status\", \"order_id\": \"$BITESHIP_ORDER_ID\", \"status\": \"delivered\"}"
+
+Expected: 401 Unauthorized
+
+Response:
+  {
+    "code": "INVALID_SIGNATURE",
+    "message": "invalid webhook signature",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: WEBHOOK — SHIPPED EVENT (success)
+
+Run with the correct webhook token:
+  curl -X POST http://localhost:8081/webhooks/biteship \
+    -H "Authorization: $WEBHOOK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"event\": \"order.status\", \"order_id\": \"$BITESHIP_ORDER_ID\", \"status\": \"allocated\", \"courier_waybill_id\": \"JNE123456789\"}"
+
+Expected: 200 OK
+
+Response:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {"status": "ok", "shipment_status": "allocated"}
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: WEBHOOK — DELIVERED EVENT (success)
+
+Run:
+  curl -X POST http://localhost:8081/webhooks/biteship \
+    -H "Authorization: $WEBHOOK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"event\": \"order.status\", \"order_id\": \"$BITESHIP_ORDER_ID\", \"status\": \"delivered\"}"
+
+Expected: 200 OK, order transitions toward "delivered" (BR-032..BR-034)
+
+Verify order status:
+  curl http://localhost:8081/api/v1/orders/$ORDER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: WEBHOOK IDEMPOTENCY (retry collapses)
+
+Send the same delivered webhook again:
+  curl -X POST http://localhost:8081/webhooks/biteship \
+    -H "Authorization: $WEBHOOK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"event\": \"order.status\", \"order_id\": \"$BITESHIP_ORDER_ID\", \"status\": \"delivered\"}"
+
+Expected: 200 OK, no double processing (BR-043). Verify a single processed row:
+  psql $POSTGRES_URL -c "SELECT event_key, event_status, processed FROM shipment_events;"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: WEBHOOK — UNKNOWN SHIPMENT (ignored, not error)
+
+Run with an order_id that doesn't exist:
+  curl -X POST http://localhost:8081/webhooks/biteship \
+    -H "Authorization: $WEBHOOK_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"event": "order.status", "order_id": "unknown-biteship-id", "status": "delivered"}'
+
+Expected: 200 OK (ignored to avoid retry storms)
+
+Response:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {"status": "ignored", "reason": "shipment_not_found"}
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: AUTO-COMPLETE WORKER (delivered → completed)
+
+Orders that stay "delivered" longer than BITESHIP_AUTOCOMPLETE_AFTER should be
+auto-completed by the worker (BR-034). Run the worker:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+  go run ./apps/api/cmd/worker
+
+Expected: eligible delivered orders flip to "completed"
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 13 tests passed ✅:
+
+✅ Database migration working
+✅ Rate quote via Biteship (BR-010..BR-011)
+✅ Rate validation working
+✅ Shipment booking (BR-028)
+✅ Duplicate shipment guard
+✅ Shipment read (admin + internal)
+✅ Webhook signature verification (BR-043)
+✅ Tracking updates transition order (BR-032..BR-034)
+✅ Webhook idempotency working
+✅ Unknown shipment ignored gracefully
+✅ Auto-complete worker
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000009_*.sql
+  git add apps/api/internal/shipping/
+  git add apps/api/cmd/worker/
+  git add apps/api/internal/config/config.go
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add apps/api/.env.example
+  git add PHASE_9_*.md PHASE_9_*.txt
+
+  git commit -m "Phase 9: Shipping (Biteship) - rates, shipments, webhook"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 THEN: READY FOR PHASE 10
+
+Phase 9 is complete! Ready to start Phase 10: Promo, Audit & Events
+
+════════════════════════════════════════════════════════════════════════════════

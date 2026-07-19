@@ -1,0 +1,350 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║           PHASE 10 TESTING — STEP BY STEP INSTRUCTIONS                     ║
+║              Promo, Audit Logs & Domain Events Testing                      ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ MIGRATIONS VERIFIED: Phase 10 migrations present
+   - 000007_create_vouchers_audit.sql   (vouchers, audit_logs)
+   - 000010_add_order_voucher.sql       (order voucher columns)
+
+⚠️ PREREQUISITE: Phase 7 complete (orders exist for voucher validation).
+⚠️ CONFIG: Set these in apps/api/.env before starting:
+   - INTERNAL_SERVICE_TOKEN   (guards /internal/v1; fails closed when empty)
+   - WEBHOOK_RATE_PER_SEC / WEBHOOK_RATE_BURST (per-IP webhook rate limit)
+   - RABBITMQ_URL             (for order.paid / order.shipped events)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 1: APPLY DATABASE MIGRATIONS
+
+Run these commands in your terminal:
+
+  cd /home/prasdios/aiproject/ai-sales-platform
+
+  # Apply Phase 10 migrations in order
+  psql $POSTGRES_URL < database/migration/000007_create_vouchers_audit.sql
+  psql $POSTGRES_URL < database/migration/000010_add_order_voucher.sql
+
+  # Verify tables created
+  psql $POSTGRES_URL -c "\dt vouchers, audit_logs"
+
+Expected output: 2 tables shown (vouchers, audit_logs)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 2: REBUILD BACKEND
+
+Run:
+  cd apps/api
+  go build -o ./bin/api ./cmd/api
+
+Expected: Binary created at ./bin/api, no errors
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 3: START BACKEND
+
+In a new terminal, run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  make api-run
+
+Expected output:
+  - No errors
+  - Server listening on http://localhost:8081
+
+Note: Keep this terminal open!
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 STEP 4: PREPARE TOKENS
+
+Admin JWT (for /api/v1 voucher + audit routes):
+
+  curl -X POST http://localhost:8081/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "admin@example.com", "password": "password123"}'
+
+  TOKEN="<PASTE_THE_ACCESS_TOKEN_HERE>"
+
+Internal service token (for /internal/v1 voucher validation):
+
+  SERVICE_TOKEN="<PASTE_INTERNAL_SERVICE_TOKEN_FROM_ENV>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 1: CREATE VOUCHER — PERCENT (ADMIN API)
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/vouchers \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "code": "HEMAT10",
+      "description": "Diskon 10 persen",
+      "discount_type": "percent",
+      "discount_value": 10,
+      "min_order_amount": 100000,
+      "quota": 100,
+      "expires_at": "2027-12-31T23:59:59Z",
+      "is_active": true
+    }'
+
+Expected: 201 Created with voucher data
+
+👉 SAVE THE VOUCHER ID:
+   VOUCHER_ID="<PASTE_THE_VOUCHER_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 2: DUPLICATE CODE (should fail)
+
+Run:
+  curl -X POST http://localhost:8081/api/v1/vouchers \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "code": "HEMAT10",
+      "discount_type": "fixed",
+      "discount_value": 5000,
+      "expires_at": "2027-12-31T23:59:59Z"
+    }'
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "VOUCHER_CODE_TAKEN",
+    "message": "voucher code already taken",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 3: LIST VOUCHERS (ADMIN API)
+
+Run:
+  curl "http://localhost:8081/api/v1/vouchers?limit=50&offset=0" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array containing HEMAT10
+
+Try the active_only filter:
+  curl "http://localhost:8081/api/v1/vouchers?active_only=true" \
+    -H "Authorization: Bearer $TOKEN"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 4: GET VOUCHER (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/vouchers/$VOUCHER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with voucher data
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 5: UPDATE VOUCHER (ADMIN API)
+
+Run:
+  curl -X PUT http://localhost:8081/api/v1/vouchers/$VOUCHER_ID \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "description": "Diskon 15 persen",
+      "discount_type": "percent",
+      "discount_value": 15,
+      "min_order_amount": 150000,
+      "quota": 200,
+      "expires_at": "2027-12-31T23:59:59Z",
+      "is_active": true
+    }'
+
+Expected: 200 OK with updated voucher
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 6: VALIDATE VOUCHER — USABLE (INTERNAL API)
+
+Checks whether a code is usable for a subtotal WITHOUT consuming quota
+(BR-037..BR-038).
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/vouchers/validate \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"code": "HEMAT10", "subtotal": 200000}'
+
+Expected: 200 OK with discount calculation (e.g., discount_amount 30000)
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 7: VALIDATE VOUCHER — MIN NOT MET (should fail)
+
+Run with a subtotal below the minimum:
+  curl -X POST http://localhost:8081/internal/v1/vouchers/validate \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"code": "HEMAT10", "subtotal": 50000}'
+
+Expected: 409 Conflict
+
+Response:
+  {
+    "code": "MIN_ORDER_NOT_MET",
+    "message": "order does not meet the voucher minimum",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 8: VALIDATE VOUCHER — NOT FOUND (should fail)
+
+Run:
+  curl -X POST http://localhost:8081/internal/v1/vouchers/validate \
+    -H "X-Service-Token: $SERVICE_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"code": "NOPE", "subtotal": 200000}'
+
+Expected: 404 Not Found
+
+Response:
+  {
+    "code": "VOUCHER_NOT_FOUND",
+    "message": "voucher not found",
+    "data": null
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 9: AUDIT LOG RECORDED (BR-049)
+
+Every successful mutating admin request (create/update/delete voucher, etc.)
+is recorded in audit_logs. List them:
+
+Run:
+  curl "http://localhost:8081/api/v1/audit-logs?limit=50&offset=0" \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with array of audit entries (your voucher create/update
+          should appear with actor, action, resource)
+
+👉 SAVE AN AUDIT LOG ID:
+   AUDIT_ID="<PASTE_AN_AUDIT_LOG_ID>"
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 10: GET AUDIT LOG (ADMIN API)
+
+Run:
+  curl http://localhost:8081/api/v1/audit-logs/$AUDIT_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK with the audit log detail
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 11: WEBHOOK RATE LIMIT (per-IP)
+
+The unauthenticated webhook endpoints are guarded by a per-IP token bucket
+(WEBHOOK_RATE_PER_SEC / WEBHOOK_RATE_BURST). Fire a burst quickly:
+
+Run:
+  for i in $(seq 1 30); do \
+    curl -s -o /dev/null -w "%{http_code}\n" \
+      -X POST http://localhost:8081/webhooks/xendit \
+      -H "Content-Type: application/json" -d '{}'; \
+  done
+
+Expected: after the burst is exhausted, requests return 429 Too Many Requests
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 12: DELETE VOUCHER (ADMIN API)
+
+Run:
+  curl -X DELETE http://localhost:8081/api/v1/vouchers/$VOUCHER_ID \
+    -H "Authorization: Bearer $TOKEN"
+
+Expected: 200 OK
+
+Response:
+  {
+    "code": "OK",
+    "message": "OK",
+    "data": {"deleted": true}
+  }
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 13: DOMAIN EVENTS (RabbitMQ)
+
+When an order is paid or shipped, Go publishes a domain event
+(order.paid / order.shipped) that apps/ai consumes for WhatsApp notify.
+
+Inspect the RabbitMQ management UI (default http://localhost:15672,
+guest/guest) or the target queue after triggering a paid webhook (Phase 8).
+
+Expected: an "order.paid" message is published to the exchange/queue
+
+════════════════════════════════════════════════════════════════════════════════
+
+✅ TEST 14: AUTHORIZATION CHECK (should fail)
+
+Run admin route without token:
+  curl http://localhost:8081/api/v1/vouchers
+
+Expected: 401 Unauthorized
+
+Run internal route without service token:
+  curl -X POST http://localhost:8081/internal/v1/vouchers/validate \
+    -H "Content-Type: application/json" \
+    -d '{"code": "HEMAT10", "subtotal": 200000}'
+
+Expected: 401 Unauthorized (invalid service token)
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 14 tests passed ✅:
+
+✅ Database migrations working
+✅ Voucher CRUD (BR-048)
+✅ Duplicate code guard
+✅ Voucher validation without quota consumption (BR-037..BR-038)
+✅ Min-order + not-found handling
+✅ Audit logging of admin mutations (BR-049)
+✅ Webhook rate limiting working
+✅ Domain events published (RabbitMQ)
+✅ Authorization working
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add database/migration/000007_*.sql
+  git add database/migration/000010_*.sql
+  git add apps/api/internal/promo/
+  git add apps/api/internal/audit/
+  git add apps/api/internal/events/
+  git add apps/api/internal/http/middleware/rate_limit.go
+  git add apps/api/internal/http/middleware/audit.go
+  git add apps/api/internal/container/container.go
+  git add apps/api/internal/http/router/router.go
+  git add apps/api/internal/bootstrap/app.go
+  git add apps/api/.env.example
+  git add PHASE_10_*.md PHASE_10_*.txt
+
+  git commit -m "Phase 10: Promo, audit logs & domain events"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎉 ALL PHASES COMPLETE
+
+Phase 10 is complete! The Go backend roadmap (Phases 4–10) is done:
+catalog → customers/cart → checkout/orders → payment → shipping → promo/audit/events.
+
+════════════════════════════════════════════════════════════════════════════════
