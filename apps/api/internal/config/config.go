@@ -20,6 +20,12 @@ type Config struct {
 	Xendit   XenditConfig
 	Biteship BiteshipConfig
 	Internal InternalConfig
+	CORS     CORSConfig
+}
+
+// CORSConfig holds allowed origins for CORS middleware
+type CORSConfig struct {
+	AllowedOrigins []string
 }
 
 // InternalConfig holds settings for the internal (apps/ai) API surface and the
@@ -156,6 +162,9 @@ func Load() (Config, error) {
 			WebhookRatePerSec: floatEnv("WEBHOOK_RATE_PER_SEC", 5),
 			WebhookRateBurst:  intEnv("WEBHOOK_RATE_BURST", 10),
 		},
+		CORS: CORSConfig{
+			AllowedOrigins: parseAllowedOrigins(env("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001")),
+		},
 	}
 
 	if !oneOf(cfg.App.Env, "development", "test", "staging", "production") {
@@ -222,4 +231,19 @@ func oneOf(value string, allowed ...string) bool {
 		}
 	}
 	return false
+}
+
+func parseAllowedOrigins(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	var origins []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }

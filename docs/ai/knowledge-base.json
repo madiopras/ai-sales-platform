@@ -1,0 +1,47 @@
+{
+  "version": "a9.1",
+  "articles": [
+    {
+      "id": "shipping-coverage",
+      "title": "Jangkauan & estimasi pengiriman",
+      "keywords": ["kirim", "pengiriman", "ongkir", "kurir", "estimasi", "sampai", "berapa hari", "jangkauan", "luar kota", "luar negeri"],
+      "answer": "Kami mengirim ke seluruh Indonesia lewat kurir rekanan (JNE, J&T, SiCepat, dan lainnya). Estimasi dan ongkos kirim tergantung alamat tujuan — aku bisa cek ongkir real-time begitu kamu kasih kota/kode pos tujuan. Untuk pengiriman ke luar negeri belum tersedia saat ini."
+    },
+    {
+      "id": "payment-methods",
+      "title": "Metode pembayaran",
+      "keywords": ["bayar", "pembayaran", "metode", "va", "virtual account", "qris", "transfer", "ewallet", "e-wallet", "cicilan", "cod"],
+      "answer": "Pembayaran bisa lewat Virtual Account (semua bank besar), QRIS, e-wallet, dan transfer bank. Setelah checkout, kamu akan dapat link/instruksi pembayaran dengan batas waktu. Saat ini kami belum melayani COD (bayar di tempat)."
+    },
+    {
+      "id": "return-policy",
+      "title": "Kebijakan retur & tukar",
+      "keywords": ["retur", "tukar", "kembali", "refund", "salah ukuran", "rusak", "garansi", "komplain"],
+      "answer": "Retur/tukar bisa diajukan maksimal 3 hari setelah barang diterima untuk produk yang rusak dari kami atau salah kirim, dengan kondisi tag/label masih utuh. Untuk proses retur/refund, aku hubungkan kamu ke admin ya biar dibantu langsung."
+    },
+    {
+      "id": "order-tracking",
+      "title": "Melacak pesanan",
+      "keywords": ["lacak", "tracking", "resi", "status pesanan", "dimana pesanan", "pesanan saya", "sudah dikirim"],
+      "answer": "Kamu bisa cek status dan nomor resi pesanan langsung di sini — sebutkan saja nomor pesananmu, atau kalau kamu sudah pernah order dari nomor ini aku bisa bantu cek yang terakhir. Nomor resi juga otomatis kami kirim via WhatsApp begitu pesanan dikirim."
+    },
+    {
+      "id": "operating-hours",
+      "title": "Jam operasional & respon admin",
+      "keywords": ["jam", "operasional", "buka", "tutup", "admin", "respon", "kapan", "libur"],
+      "answer": "Aku (asisten AI) siap membantu 24 jam. Untuk hal yang butuh admin manusia (komplain, negosiasi, retur), tim kami merespons pada jam kerja 09.00–17.00 WIB, Senin–Sabtu."
+    },
+    {
+      "id": "size-guide",
+      "title": "Panduan ukuran",
+      "keywords": ["ukuran", "size", "chart", "panduan", "kekecilan", "kebesaran", "pas", "lingkar"],
+      "answer": "Setiap produk punya detail ukuran di deskripsinya. Kalau ragu antara dua ukuran, aku bisa bantu bandingkan berdasarkan tinggi/berat badan kamu. Sebutkan saja produknya, nanti aku carikan detail ukuran yang tersedia."
+    },
+    {
+      "id": "wholesale",
+      "title": "Pembelian grosir / reseller",
+      "keywords": ["grosir", "reseller", "dropship", "partai", "borongan", "harga khusus", "banyak"],
+      "answer": "Untuk pembelian jumlah besar, grosir, atau kerja sama reseller/dropship, ada penawaran harga khusus. Aku hubungkan kamu ke admin kami ya untuk detail penawarannya."
+    }
+  ]
+}

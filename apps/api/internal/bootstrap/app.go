@@ -40,6 +40,7 @@ func New() (*App, error) {
 		AuditService:     ctr.AuditService,
 		ServiceToken:     ctr.Config.Internal.ServiceToken,
 		WebhookRateLimit: middleware.NewRateLimit(ctr.Config.Internal.WebhookRatePerSec, ctr.Config.Internal.WebhookRateBurst),
+		AllowedOrigins:   ctr.Config.CORS.AllowedOrigins,
 
 		Health:   health.NewHandler(ctr.HealthService),
 		Auth:     auth.NewHandler(ctr.AuthService),

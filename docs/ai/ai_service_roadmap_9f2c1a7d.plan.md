@@ -4,28 +4,29 @@ overview: "Roadmap pengembangan layanan AI (apps/ai, FastAPI, single-tenant) yan
 todos:
   - id: phase-a1-foundation
     content: "Phase A1: skeleton FastAPI, config, health, backend client (/internal/v1 + service token), logging & error envelope"
-    status: pending
+    status: completed
   - id: phase-a2-whatsapp
     content: "Phase A2: WhatsApp provider abstraction, webhook verify + receive, send text/media, outbound queue"
-    status: pending
+    status: completed
   - id: phase-a3-conversation
     content: "Phase A3: session & conversation state machine (Redis), context store, timeout, handover flag"
-    status: pending
+    status: completed
+
   - id: phase-a4-llm
     content: "Phase A4: LLM orchestration, system prompt loader, intent detection, tool/function calling framework"
-    status: pending
+    status: completed
   - id: phase-a5-sales-tools
     content: "Phase A5: sales tools — product search/recommendation, cart, customer & address (BR-002..BR-009, BR-039..BR-040)"
-    status: pending
+    status: completed
   - id: phase-a6-checkout-pay-ship
     content: "Phase A6: shipping rates, checkout summary + confirm, invoice + payment link, tracking (BR-010..BR-024, BR-032)"
-    status: pending
+    status: completed
   - id: phase-a7-notifications
     content: "Phase A7: RabbitMQ consumer untuk order.paid/shipped/status → notifikasi WA (BR-024, BR-027, BR-031, BR-041)"
-    status: pending
+    status: completed
   - id: phase-a8-handover
     content: "Phase A8: human handover (BR-003, BR-045), confidence gating, prompt-injection guard (BR-042..BR-047)"
-    status: pending
+    status: completed
   - id: phase-a9-kb-growth
     content: "Phase A9: knowledge base RAG, abandoned cart recovery, upsell/cross-sell, analytics events (BR-050)"
     status: pending

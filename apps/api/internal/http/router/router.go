@@ -26,6 +26,7 @@ type Deps struct {
 	AuditService     *audit.Service
 	ServiceToken     string
 	WebhookRateLimit *middleware.RateLimit
+	AllowedOrigins   []string
 
 	Health   *health.Handler
 	Auth     *auth.Handler
@@ -41,7 +42,7 @@ type Deps struct {
 func New(d Deps) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
-	router.Use(middleware.RequestID(), middleware.Recovery(d.Logger), middleware.Logging(d.Logger), middleware.ErrorHandler(d.Logger))
+	router.Use(middleware.RequestID(), middleware.Recovery(d.Logger), middleware.Logging(d.Logger), middleware.ErrorHandler(d.Logger), middleware.CORS(d.AllowedOrigins))
 
 	// Health endpoints (unchanged)
 	router.GET("/health/live", d.Health.Live)

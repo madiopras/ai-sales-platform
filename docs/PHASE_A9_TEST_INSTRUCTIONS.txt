@@ -1,0 +1,357 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║       PHASE A9 TESTING — STEP BY STEP INSTRUCTIONS                        ║
+║       Knowledge Base, Recovery & Analytics                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ PREREQUISITES:
+   - Phase A1-A8 complete and tested
+   - Backend API running (apps/api)
+   - Redis running
+   - Python 3.10+ with dependencies installed
+
+════════════════════════════════════════════════════════════════════════════════
+
+🧪 STEP 1: RUN UNIT TESTS
+
+Run all Phase A9 tests:
+
+  cd apps/ai
+  pytest tests/test_knowledge.py -v
+  pytest tests/test_recovery.py -v
+  pytest tests/test_analytics.py -v
+
+Expected output:
+  - test_knowledge.py: 10 tests passed
+  - test_recovery.py: 10 tests passed
+  - test_analytics.py: 8 tests passed
+  - Total: 28 tests, 0 failures
+
+════════════════════════════════════════════════════════════════════════════════
+
+📚 TEST 2: KNOWLEDGE BASE — SEARCH FAQ
+
+Test the knowledge base directly from Python REPL:
+
+  cd apps/ai
+  python
+
+In Python REPL:
+
+  >>> from app.knowledge.store import load_knowledge_base
+  >>> kb = load_knowledge_base()
+  >>> print(f"Loaded {len(kb)} articles, version {kb.version}")
+  >>> 
+  >>> # Test shipping query
+  >>> result = kb.search("berapa ongkir ke jakarta?")
+  >>> print(result.id if result else "No match")
+  >>> print(result.answer if result else "")
+  >>>
+  >>> # Test payment query
+  >>> result = kb.search("cara bayar gimana?")
+  >>> print(result.id if result else "No match")
+  >>> print(result.answer if result else "")
+  >>>
+  >>> # Test return policy
+  >>> result = kb.search("bisa retur ga?")
+  >>> print(result.id if result else "No match")
+  >>> print(result.answer if result else "")
+
+Expected:
+  - Loaded 7 articles, version a9.1
+  - Shipping query → "shipping-coverage"
+  - Payment query → "payment-methods"
+  - Return query → "return-policy"
+  - Each answer is a complete paragraph (not truncated)
+
+════════════════════════════════════════════════════════════════════════════════
+
+📚 TEST 3: KNOWLEDGE BASE — VIA CHAT
+
+Test KB through the WhatsApp service (requires LLM orchestrator wired):
+
+  # Terminal 1: Start backend
+  cd apps/api
+  make api-run
+
+  # Terminal 2: Start AI service
+  cd apps/ai
+  ANALYTICS_ENABLED=true uvicorn app.main:app --reload --port 8090
+
+Send a WhatsApp message (via webhook test or actual WA):
+
+  "Berapa lama estimasi pengiriman ke Bandung?"
+
+Expected agent reply should include info from KB article "shipping-coverage".
+
+════════════════════════════════════════════════════════════════════════════════
+
+🔄 TEST 4: ABANDONED CART RECOVERY — SETUP
+
+Create an abandoned cart scenario:
+
+1. Via WhatsApp, complete these steps:
+   - Start conversation: "Halo"
+   - Add item to cart: "Mau beli kaos hitam size L"
+   - Confirm cart has item
+
+2. Then STOP (don't proceed to checkout)
+
+3. Wait for the idle time (default 1 hour, or set shorter for testing)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🔄 TEST 5: RECOVERY WORKER — RUN MANUALLY
+
+For faster testing, temporarily reduce idle time:
+
+  # In apps/ai/.env
+  RECOVERY_IDLE_SECONDS=300         # 5 minutes instead of 1 hour
+  RECOVERY_SWEEP_INTERVAL_SECONDS=60 # 1 minute sweeps
+  ANALYTICS_ENABLED=true
+
+Run the recovery worker:
+
+  cd apps/ai
+  python -m app.cmd.recovery_worker
+
+Expected log output:
+  - recovery_worker_started (interval_seconds: 60)
+  - After idle time passes: recovery_sweep_completed (reminders_sent: 1)
+  - Session should receive WhatsApp reminder message
+
+Reminder message should say something like:
+  "Halo! Keranjang belanja kamu masih kami simpan 😊 Mau dilanjutkan ke pesanan?
+   Ketik saja *lanjut* dan aku bantu prosesnya."
+
+Stop worker with Ctrl+C:
+  - Should log: signal_received, recovery_worker_stopped
+  - Should exit cleanly (no errors)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🔄 TEST 6: RECOVERY — IDEMPOTENCY
+
+Run the worker again immediately:
+
+  python -m app.cmd.recovery_worker
+
+Expected:
+  - Sweep runs but reminders_sent: 0
+  - Same session should NOT get another reminder (cooldown active)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🔄 TEST 7: RECOVERY — EMPTY CART
+
+Clear the cart via WhatsApp or directly:
+
+  curl -X DELETE http://localhost:8081/internal/v1/customers/{customer_id}/cart \
+    -H "X-Service-Token: your-service-token"
+
+Run worker again:
+
+  python -m app.cmd.recovery_worker
+
+Expected:
+  - Sweep runs but reminders_sent: 0 (cart is empty, no reminder)
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TEST 8: ANALYTICS — CHECK REDIS
+
+With analytics enabled, check events are being stored:
+
+  redis-cli
+  > LRANGE analytics:events 0 10
+
+Expected output: JSON events like:
+  {
+    "type": "message_received",
+    "ts": 1721587892,
+    "wa_hash": "...7890",
+    "props": {"type": "text"}
+  }
+
+  {
+    "type": "conversation_started",
+    "ts": 1721587890,
+    "wa_hash": "...7890",
+    "props": {}
+  }
+
+Check list length:
+  > LLEN analytics:events
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TEST 9: ANALYTICS — EVENT TYPES
+
+Trigger different events and verify they're logged:
+
+1. **conversation_started**: Send first message from new number
+2. **message_received**: Any inbound message
+3. **cart_item_added**: Add product via chat
+4. **checkout_previewed**: Request checkout preview
+5. **order_created**: Confirm checkout
+6. **abandoned_cart_reminder_sent**: Run recovery worker
+7. **injection_blocked**: Send "ignore previous instructions"
+8. **kb_answered**: Ask FAQ question
+
+Check logs for each event:
+
+  tail -f logs/ai-service.log | grep analytics_event
+
+Expected: Each action triggers corresponding event in logs
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TEST 10: ANALYTICS — PRIVACY
+
+Verify WA IDs are hashed:
+
+  redis-cli LRANGE analytics:events 0 -1 | grep wa_hash
+
+Expected:
+  - All wa_hash values look like "...1234" (last 4 digits only)
+  - NO full phone numbers visible
+
+Check logs too:
+
+  grep -r "628" logs/ai-service.log
+
+Expected: No full phone numbers in logs (only hashed)
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TEST 11: ANALYTICS — CAPPED LIST
+
+Verify list is capped at max_events:
+
+  # Generate many events (send many messages)
+  # Then check list size
+  redis-cli LLEN analytics:events
+
+Expected:
+  - List length ≤ ANALYTICS_MAX_EVENTS (default 10000)
+  - Oldest events are trimmed (FIFO)
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TEST 12: ANALYTICS — DISABLED MODE
+
+Test with analytics disabled:
+
+  # In .env
+  ANALYTICS_ENABLED=false
+
+  # Restart service
+  uvicorn app.main:app --reload --port 8090
+
+Send messages, check Redis:
+
+  redis-cli LRANGE analytics:events 0 -1
+
+Expected:
+  - List is empty (no events pushed)
+  - Service still works normally (NullAnalyticsEmitter)
+  - Logs still show analytics_event (structured logging always works)
+
+════════════════════════════════════════════════════════════════════════════════
+
+🔧 TEST 13: INTEGRATION — ALL FEATURES TOGETHER
+
+Full end-to-end with all Phase A9 features:
+
+1. Start backend + AI service with analytics enabled
+2. Customer asks FAQ: "Bagaimana cara retur barang?"
+   → Agent answers from KB
+   → Analytics: kb_answered event
+
+3. Customer adds items to cart: "Mau beli kaos hitam XL"
+   → Analytics: cart_item_added event
+
+4. Customer stops (abandons cart)
+   → Wait for idle time
+
+5. Recovery worker runs
+   → Reminder sent
+   → Analytics: abandoned_cart_reminder_sent event
+
+6. Customer returns and completes order
+   → Analytics: order_created, order_paid events
+
+7. Check Redis analytics:events list
+   → Should have sequence of events for full funnel
+
+════════════════════════════════════════════════════════════════════════════════
+
+📊 TESTING SUMMARY
+
+If all 13 tests passed ✅:
+
+✅ Knowledge base loaded (7 articles)
+✅ KB search returns correct articles
+✅ KB answers via chat work
+✅ Recovery worker runs and exits cleanly
+✅ Abandoned carts get reminders
+✅ Recovery idempotency works (no double reminders)
+✅ Empty carts are skipped
+✅ Analytics events stored in Redis
+✅ All event types can be triggered
+✅ WA IDs are hashed (privacy)
+✅ Analytics list is capped
+✅ Analytics can be disabled (graceful)
+✅ Full integration works end-to-end
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎯 PRODUCTION READINESS CHECKLIST
+
+Before deploying to production:
+
+☐ Set appropriate RECOVERY_IDLE_SECONDS (e.g., 3600 = 1 hour)
+☐ Set RECOVERY_COOLDOWN_SECONDS (e.g., 86400 = 24 hours)
+☐ Set RECOVERY_MAX_REMINDERS (e.g., 1 to avoid spam)
+☐ Enable ANALYTICS_ENABLED=true
+☐ Set up ETL to drain analytics:events from Redis
+☐ Deploy recovery_worker as systemd service or cron job
+☐ Monitor recovery_sweep_completed logs
+☐ Monitor analytics Redis list length
+☐ Update knowledge-base.json with actual business FAQs
+☐ Test KB answers match business policies
+
+════════════════════════════════════════════════════════════════════════════════
+
+🚀 NEXT STEP: COMMIT TO GIT
+
+Run:
+  cd /home/prasdios/aiproject/ai-sales-platform
+  git add apps/ai/app/cmd/recovery_worker.py
+  git add apps/ai/app/config.py
+  git add apps/ai/app/main.py
+  git add apps/ai/app/whatsapp/service.py
+  git add apps/ai/tests/test_knowledge.py
+  git add apps/ai/tests/test_recovery.py
+  git add apps/ai/tests/test_analytics.py
+  git add PHASE_A9_*.md PHASE_A9_*.txt
+
+  git commit -m "Phase A9: Knowledge base, recovery & analytics
+
+  - Knowledge base: keyword-based FAQ retrieval (7 articles)
+  - Abandoned cart recovery: worker + reminder service
+  - Analytics: 12 event types → Redis sink + logs
+  - Config: opt-in flags for analytics/recovery
+  - Tests: 28 tests (knowledge, recovery, analytics)
+
+  BR-003, BR-004, BR-044, BR-050"
+
+════════════════════════════════════════════════════════════════════════════════
+
+🎉 PHASE A9 COMPLETE!
+
+All AI service phases (A1-A9) are now finished.
+AI Sales Agent is production-ready.
+
+Next: Admin Dashboard (new roadmap)
+
+════════════════════════════════════════════════════════════════════════════════
