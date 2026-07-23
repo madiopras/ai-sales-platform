@@ -12,6 +12,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.analytics.emitter import AnalyticsEmitter, NullAnalyticsEmitter
 from app.clients.backend import BackendClient
@@ -132,6 +133,20 @@ def create_app() -> FastAPI:
         docs_url="/docs" if not settings.is_production else None,
         redoc_url=None,
         lifespan=lifespan,
+    )
+
+    # CORS — allow the admin frontend (and other trusted origins) to call the
+    # AI service directly from the browser (e.g. inbox endpoints).
+    allowed_origins = [
+        o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        max_age=86400,
     )
 
     app.add_middleware(RequestContextMiddleware)

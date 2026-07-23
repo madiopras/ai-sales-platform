@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     http_host: str = Field(default="0.0.0.0")
     http_port: int = Field(default=8090)
 
+    # --- CORS ---
+    cors_allowed_origins: str = Field(default="http://localhost:3000,http://localhost:3001")
+
     # --- Backend (Go /internal/v1) ---
     backend_base_url: str = Field(default="http://localhost:8081")
     backend_service_token: str = Field(default="")
@@ -90,13 +93,13 @@ class Settings(BaseSettings):
     # Empty provider selects the built-in rule-based orchestrator, which needs
     # no external API key. Set to "openai" (OpenAI-compatible chat completions)
     # to use a real model with function calling.
-    llm_provider: str = Field(default="")
-    llm_model: str = Field(default="")
-    llm_api_key: str = Field(default="")
+    llm_provider: str = Field(default="openai")
+    llm_model: str = Field(default="dios-aisales")
+    llm_api_key: str = Field(default="sk-d484dc3894b87bd8-1uoge3-486e7e79")
     llm_max_tokens: int = Field(default=1024)
     llm_temperature: float = Field(default=0.3)
     # Base URL for OpenAI-compatible chat completions (override for Azure/other).
-    llm_api_base_url: str = Field(default="https://api.openai.com/v1")
+    llm_api_base_url: str = Field(default="http://localhost:20128/v1")
     # Safety cap on tool-call round trips per turn so a misbehaving model can't
     # loop forever calling tools.
     llm_max_tool_iterations: int = Field(default=4)

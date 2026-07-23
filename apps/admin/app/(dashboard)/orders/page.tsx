@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -32,6 +32,10 @@ interface Order {
   recipient_name: string;
   total: number;
   created_at: string;
+}
+
+interface OrderListResponse {
+  orders?: Order[];
 }
 
 const ORDER_STATUSES = [
@@ -81,7 +85,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data: orders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["orders", statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -89,16 +93,24 @@ export default function OrdersPage() {
         params.append("status", statusFilter);
       }
       const response = await api.get(`/api/v1/orders?${params.toString()}`);
-      return response.data.data as Order[];
+      const data = response.data.data as Order[] | OrderListResponse;
+      return Array.isArray(data) ? data : data.orders ?? [];
     },
   });
 
-  // Basic client-side filtering for search query
-  const filteredOrders = data?.filter(
-    (order) =>
-      order.order_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.recipient_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return orders;
+    }
+
+    return orders.filter(
+      (order) =>
+        order.order_no.toLowerCase().includes(query) ||
+        order.recipient_name.toLowerCase().includes(query),
+    );
+  }, [orders, searchQuery]);
 
   return (
     <div className="space-y-6">

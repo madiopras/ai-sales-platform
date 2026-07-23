@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -13,29 +13,42 @@ interface Customer {
   id: string;
   phone: string;
   name: string;
-  email: string;
+  email?: string;
   created_at: string;
   total_orders?: number;
   total_spent?: number;
 }
 
+interface CustomerListResponse {
+  customers?: Customer[];
+}
+
 export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: customers, isLoading } = useQuery<Customer[]>({
+  const { data: customers = [], isLoading } = useQuery<Customer[]>({
     queryKey: ["customers"],
     queryFn: async () => {
       const response = await api.get("/api/v1/customers");
-      return response.data.data;
+      const data = response.data.data as Customer[] | CustomerListResponse;
+      return Array.isArray(data) ? data : data.customers ?? [];
     },
   });
 
-  const filteredCustomers = customers?.filter(
-    (customer) =>
-      customer.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredCustomers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    if (!query) {
+      return customers;
+    }
+
+    return customers.filter(
+      (customer) =>
+        customer.phone.toLowerCase().includes(query) ||
+        customer.name.toLowerCase().includes(query) ||
+        customer.email?.toLowerCase().includes(query),
+    );
+  }, [customers, searchQuery]);
 
   return (
     <div className="space-y-6">

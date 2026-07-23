@@ -14,6 +14,10 @@ import {
   voucherState,
 } from "@/lib/vouchers";
 
+interface VoucherListResponse {
+  vouchers?: Voucher[];
+}
+
 export default function PromosPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -23,7 +27,8 @@ export default function PromosPage() {
     queryKey: ["vouchers"],
     queryFn: async () => {
       const response = await api.get("/api/v1/vouchers");
-      return response.data.data;
+      const data = response.data.data as Voucher[] | VoucherListResponse;
+      return Array.isArray(data) ? data : data.vouchers ?? [];
     },
   });
 
